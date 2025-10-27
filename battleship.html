@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Civics Battleship — Unit 5</title>
+  <style>
+    :root{--water-color:#add8e6;--water-border:#007bff;--ship-color:#808080;--ship-border:#555;--hit-color:#dc3545;--miss-color:#6c757d;--preview-valid:rgba(0,255,0,.4);--preview-invalid:rgba(255,0,0,.4);--main-bg:#f0f8ff;--main-text:#333;--title-color:#004a99;--subtitle-color:#0056b3;--shadow:0 4px 12px rgba(0,0,0,.1);--cell-size:40px;--ship-radius:20px}
+    body{font-family:Verdana,Geneva,sans-serif;background-image:linear-gradient(180deg,#f0f8ff 0%,#d6e8ff 100%);color:var(--main-text);text-align:center;margin:0;padding:20px;min-height:100vh}
+    h1{color:var(--title-color);font-size:2.2em;margin:0 0 6px}
+    h2{color:var(--subtitle-color);margin:5px 0 10px}
+    .game-container{display:flex;justify-content:center;flex-wrap:wrap;gap:40px;margin:20px auto}
+    .board-container{display:flex;flex-direction:column;align-items:center}
+    .board-wrapper{display:grid;grid-template-columns:30px 1fr;grid-template-rows:30px 1fr;box-shadow:var(--shadow);border-radius:4px;overflow:hidden}
+    .coord-label{display:flex;align-items:center;justify-content:center;font-weight:bold;color:var(--subtitle-color);background:#fff;font-size:.9em}
+    .coord-label.x-axis{grid-column:2;grid-row:1;justify-content:space-around;border-bottom:2px solid var(--title-color)}
+    .coord-label.y-axis{grid-column:1;grid-row:2;flex-direction:column;justify-content:space-around;border-right:2px solid var(--title-color)}
+    .status-container{margin-top:10px;min-height:50px}
+    #game-status{font-size:1.05em;font-weight:bold}
+    #start-button,#rules-button{font-size:1.05em;padding:9px 16px;font-weight:bold;color:#fff;border:none;border-radius:5px;cursor:pointer;transition:.2s;margin:5px;box-shadow:0 2px 5px rgba(0,0,0,.15)}
+    #start-button{background:#28a745}#start-button:hover{background:#218838;transform:translateY(-2px)}
+    #rules-button{background:#007bff}#rules-button:hover{background:#0056b3;transform:translateY(-2px)}
+    .grid-board{display:grid;grid-template-columns:repeat(10,var(--cell-size));grid-template-rows:repeat(10,var(--cell-size));border:2px solid var(--title-color);background:var(--water-color);grid-column:2;grid-row:2}
+    .cell{width:var(--cell-size);height:var(--cell-size);border:1px solid var(--water-border);box-sizing:border-box;transition:background-color .2s;position:relative}
+    #opponent-board .cell{cursor:pointer}
+    #player-board.placement-mode .cell{cursor:crosshair}
+    .cell.preview-valid{background:var(--preview-valid)!important}
+    .cell.preview-invalid{background:var(--preview-invalid)!important}
+    .cell.ship{background:var(--ship-color);border:1px solid var(--ship-border);z-index:1}
+    .ship.ship-horizontal.ship-start{border-radius:var(--ship-radius) 0 0 var(--ship-radius)}
+    .ship.ship-horizontal.ship-end{border-radius:0 var(--ship-radius) var(--ship-radius) 0}
+    .ship.ship-vertical.ship-start{border-radius:var(--ship-radius) var(--ship-radius) 0 0}
+    .ship.ship-vertical.ship-end{border-radius:0 0 var(--ship-radius) var(--ship-radius)}
+    .ship.ship-middle::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:10px;height:10px;background:#aaa;border-radius:50%;border:1px solid #444;z-index:2}
+    #opponent-board .cell:hover{background:#e0ffff}
+    .cell.hit{background:var(--hit-color);animation:hit-animation .7s ease-out;z-index:3}
+    .cell.hit::before{content:'💥';font-size:20px;line-height:var(--cell-size);position:absolute;inset:0}
+    .cell.miss{background:var(--miss-color);animation:miss-animation .5s}
+    .cell.miss::before{content:'💧';font-size:20px;line-height:var(--cell-size);position:absolute;inset:0}
+    #player-board .cell.hit{background:#ffc107}
+    #player-board .cell.hit.ship{background:var(--ship-color)}
+    #player-board .cell.hit.ship::before{content:'🔥';z-index:4}
+    .cell.sunk{background:#222!important;border:1px solid red}
+    .cell.sunk::before{content:'🔥'}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;justify-content:center;align-items:center;z-index:100}
+    .modal-content{background:#fff;padding:20px 30px;border-radius:10px;width:90%;max-width:640px;box-shadow:0 5px 15px rgba(0,0,0,.3);text-align:left}
+    .modal-content h2{text-align:left;margin:0 0 12px;font-size:1.05em}
+    .answer-options{display:grid;grid-template-columns:1fr;gap:12px;margin-top:10px}
+    .answer-btn{font-size:1em;padding:12px;border:2px solid #007bff;background:#fff;color:#007bff;border-radius:6px;cursor:pointer;text-align:left;transition:.2s}
+    .answer-btn:hover{background:#007bff;color:#fff}
+    #placement-controls{background:#e6f7ff;padding:15px;border-radius:8px;border:2px solid var(--water-border);margin:20px auto;max-width:820px;box-shadow:var(--shadow)}
+    #ship-dock{display:flex;justify-content:center;gap:10px;margin:10px 0;flex-wrap:wrap}
+    .ship-btn{font-size:.95em;padding:10px;background:#fff;border:2px solid var(--water-border);border-radius:5px;cursor:pointer}
+    .ship-btn.active{background:var(--water-border);color:#fff;font-weight:bold}
+    .ship-btn:disabled{background:#ccc;border-color:#999;cursor:not-allowed;opacity:.7}
+    #orientation-btn{font-size:.95em;padding:10px 15px;background:#ffc107;border:2px solid #e0a800;border-radius:5px;cursor:pointer;margin-top:10px}
+    .hidden{display:none}
+    @keyframes hit-animation{0%{transform:scale(1)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
+    @keyframes miss-animation{0%{opacity:0}100%{opacity:1}}
+  </style>
+</head>
+<body>
+  <h1>🚢 Civics Battleship — Unit 5: Role of the Media</h1>
+  <div class="status-container">
+    <h3 id="game-status">Press “Start Game” to begin.</h3>
+    <button id="start-button">Start Game</button>
+    <button id="rules-button">How to Play</button>
+  </div>
+
+  <div id="placement-controls" class="hidden">
+    <h3 id="placement-title">Place Your Ships</h3>
+    <p id="placement-status">Select a ship to place.</p>
+    <div id="ship-dock"></div>
+    <button id="orientation-btn">Orientation: Horizontal</button>
+  </div>
+
+  <div class="game-container">
+    <div class="board-container" id="player-board-container">
+      <h2>Your Board</h2>
+      <div class="board-wrapper">
+        <div class="coord-label x-axis" id="player-x-axis"></div>
+        <div class="coord-label y-axis" id="player-y-axis"></div>
+        <div class="grid-board" id="player-board"></div>
+      </div>
+    </div>
+    <div class="board-container hidden" id="opponent-board-container">
+      <h2>Opponent Waters</h2>
+      <div class="board-wrapper">
+        <div class="coord-label x-axis" id="opponent-x-axis"></div>
+        <div class="coord-label y-axis" id="opponent-y-axis"></div>
+        <div class="grid-board" id="opponent-board"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="question-modal" class="modal-backdrop hidden">
+    <div class="modal-content">
+      <h2 id="question-text">Question</h2>
+      <div class="answer-options">
+        <button class="answer-btn" data-idx="0">A)</button>
+        <button class="answer-btn" data-idx="1">B)</button>
+        <button class="answer-btn" data-idx="2">C)</button>
+        <button class="answer-btn" data-idx="3">D)</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="rules-modal" class="modal-backdrop hidden">
+    <div class="modal-content">
+      <h2>How to Play</h2>
+      <ul>
+        <li>Place 5 ships. Rotate with “Orientation”.</li>
+        <li>Click a square to attack; answer the question to fire.</li>
+        <li>Correct → your shot fires. Wrong → AI shoots.</li>
+        <li>First to sink all 17 ship cells wins.</li>
+      </ul>
+      <button class="answer-btn" id="rules-close-btn">Got it</button>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const GRID_SIZE = 10;
+      const SHIP_ROSTER = [
+        { name: "Carrier", length: 5 },
+        { name: "Battleship", length: 4 },
+        { name: "Cruiser", length: 3 },
+        { name: "Submarine", length: 3 },
+        { name: "Destroyer", length: 2 }
+      ];
+      const TOTAL_SHIP_SQUARES = SHIP_ROSTER.reduce((s, ship) => s + ship.length, 0);
+
+      // --------------------- 100 QUESTIONS (SOL.9a–f) ---------------------
+      const QUESTIONS100 = [
+        // 9a — Press (20)
+        {q:"Which amendment protects freedom of the press?",o:["1st Amendment","2nd Amendment","5th Amendment","10th Amendment"],a:0},
+        {q:"What does “freedom of the press” mean?",o:["The government cannot control the news","Only good news may be shared","Only TV can report the news","Leaders must approve stories"],a:0},
+        {q:"Why is a free press vital to democracy?",o:["It helps hold leaders accountable","It replaces elections","It writes laws","It sets taxes"],a:0},
+        {q:"What does it mean when the press acts as a 'watchdog'?",o:["It reports on what officials do","It picks candidates","It runs government agencies","It makes court rulings"],a:0},
+        {q:"What does 'setting the public agenda' mean for the media?",o:["Highlighting the issues people need to know about","Stopping coverage of important topics","Choosing election winners","Writing new laws"],a:0},
+        {q:"What does 'focusing public attention' mean?",o:["Giving extra coverage to selected issues","Hiding important topics","Banning opinions","Only covering sports"],a:0},
+        {q:"How does the press hold officials accountable?",o:["By reporting their actions to the public","By ignoring the government","By praising only one side","By blocking questions"],a:0},
+        {q:"How do press conferences and interviews help democracy?",o:["They let leaders communicate with the public","They replace Congress","They ban debates","They end campaigns"],a:0},
+        {q:"What does it mean for the press to be 'free and independent'?",o:["It isn’t controlled by the government","It belongs to one political party","It is paid to print rumors","It is told what to publish"],a:0},
+        {q:"How does news help citizens?",o:["It helps them make informed choices","It lets them make private laws","It lets them decide court cases","It gives only weather reports"],a:0},
+        {q:"In elections, what does the media help identify?",o:["Who the candidates are","Who will win for sure","How to vote for one party","Where to find rumors"],a:0},
+        {q:"During elections, what does the media often emphasize?",o:["Issues voters care about","Only advertisements","Only sports","Only jokes"],a:0},
+        {q:"What does 'broadcasting different points of view' mean?",o:["Sharing more than one side of an issue","Hiding disagreements","Only using leaders’ opinions","Only telling jokes"],a:0},
+        {q:"What are editorials?",o:["Opinion pieces written by the newspaper","Court rulings","Weather updates","Classified ads"],a:0},
+        {q:"What do political cartoons mainly do?",o:["Use pictures to share an opinion","Report stock prices","Give exact data tables","List holidays"],a:0},
+        {q:"What is it called when a story is stopped before printing?",o:["Censorship","Editing for grammar","Fact-checking","Interviewing"],a:0},
+        {q:"What does freedom of the press allow reporters to do?",o:["Question powerful people","Ban public meetings","Set court dates","Write the budget"],a:0},
+        {q:"What does 'free press' plus 'responsible press' suggest?",o:["Freedom with careful fact-checking","No sources are needed","Only opinions matter","No corrections allowed"],a:0},
+        {q:"What is the press’s main role related to government?",o:["Informing the public about actions and issues","Picking new laws","Scheduling elections","Running agencies"],a:0},
+        {q:"What is the media’s main role in elections?",o:["Informing voters about candidates and issues","Counting the votes","Choosing polling places","Certifying results"],a:0},
+
+        // 9b — Bias (20)
+        {q:"What does 'bias' mean in news?",o:["Strongly favoring one side","Sharing all sides equally","Using only numbers","Avoiding any opinion"],a:0},
+        {q:"Which best describes biased reporting?",o:["Opinion influences how events are selected or told","All facts are checked with many sources","All sources are balanced","Headlines are always neutral"],a:0},
+        {q:"How can bias shape public opinion?",o:["It pushes people toward one view","It always provides full context","It removes emotions from issues","It shows every piece of evidence"],a:0},
+        {q:"What does bias make harder for citizens to do?",o:["Separate fact from opinion","Watch the weather","Read headlines","See photos"],a:0},
+        {q:"When can group polarization happen?",o:["When people see mostly one-sided messages","When everyone reads many viewpoints","When advertisements are removed","When voting ends"],a:0},
+        {q:"What is political segregation in media use?",o:["People split into like-minded information groups","People often mix with opposing views","No one has opinions","Only sports are covered"],a:0},
+        {q:"When does intolerance of different views tend to grow?",o:["When reports mock or dismiss other sides","When stories compare ideas fairly","When language is neutral","When many sources are used"],a:0},
+        {q:"What might a biased headline do?",o:["Leave out key facts to push a view","Add full context for all sides","Name sources clearly","Invite all perspectives"],a:0},
+        {q:"Which is a common clue of bias?",o:["Loaded words that stir emotion","A calm, neutral tone","Clear sourcing and methods","Visible corrections"],a:0},
+        {q:"If a story has only one source, what does that suggest?",o:["It may be slanted or incomplete","It is certainly perfect","It must be neutral","It has no impact"],a:0},
+        {q:"How can biased images or charts mislead readers?",o:["By exaggerating size or importance","By guaranteeing accuracy","By removing feelings","By proving fairness"],a:0},
+        {q:"How can biased reporting affect voting?",o:["By influencing which policies people support","By counting ballots","By setting election dates","By picking polling places"],a:0},
+        {q:"How can you check for bias in coverage?",o:["Compare the story across different outlets","Trust one headline","Read only the comments","Avoid all sources"],a:0},
+        {q:"Which trait is common in a balanced article?",o:["It checks facts with multiple reliable sources","It relies on rumors","It hides evidence","It uses insults"],a:0},
+        {q:"What is it called when the other side’s strongest points are ignored?",o:["One-sided coverage","Neutral analysis","Careful context","Fair summary"],a:0},
+        {q:"Which sentence is an opinion, not a fact?",o:["“This plan is the worst ever.”","“The vote total was 6–3.”","“The law passed on May 2.”","“The meeting lasted one hour.”"],a:0},
+        {q:"How does bias often spread online?",o:["People share posts without checking them","People read full articles","People look for original sources","People compare viewpoints"],a:0},
+        {q:"A story that fairly presents different views is usually:",o:["Less biased","Always wrong","Never useful","Only opinion"],a:0},
+        {q:"In news writing, words like “traitor” or “hero” are:",o:["Emotional language that can bias readers","Neutral wording","A source citation","A correction"],a:0},
+        {q:"Overall, what can biased reporting do?",o:["Shape public opinion and voting choices","Stop elections from happening","Fix every problem","Replace lawmakers"],a:0},
+
+        // 9c — Participation (20)
+        {q:"Which is a formal way to express a political opinion?",o:["Write a letter to a government official","Talk to a friend","Post a meme","Make a joke video"],a:0},
+        {q:"Which is an informal way to express a political opinion?",o:["Post on social media","Testify at a hearing","File an official comment","Vote in an election"],a:0},
+        {q:"Which items are examples of print media?",o:["Letters, posters, and newspapers","Only live streams","Only phone calls","Only TV programs"],a:0},
+        {q:"Which items are examples of electronic media?",o:["Emails, websites, and social posts","Only paper letters","Only in-person talks","Only radio"],a:0},
+        {q:"Which actions are examples of in-person participation?",o:["Protests, town halls, and meetings","Only text messages","Only likes on a post","Only paid ads"],a:0},
+        {q:"What do public comments on a proposed rule do?",o:["Inform an agency before the rule is final","Elect the agency leaders","Pick judges for courts","Set court dates"],a:0},
+        {q:"A letter to the editor is mainly:",o:["A public opinion piece","A court order","A private memo","A budget document"],a:0},
+        {q:"Volunteering for a campaign is an example of:",o:["Political participation","Court work","A secret ballot","Jury duty"],a:0},
+        {q:"Voting is considered:",o:["A formal way to influence policy","An informal chat","A private rumor","A meme"],a:0},
+        {q:"Speaking at a public meeting allows you to:",o:["Share views with decision makers","Replace their jobs","Close the meeting","Block other speakers"],a:0},
+        {q:"What do petitions usually show?",o:["Organized support for a change","That elections are replaced","That leaders must be punished","That debate has ended"],a:0},
+        {q:"A respectful email to a leader should be:",o:["Clear, polite, and specific","Written in ALL CAPS","Insulting to others","Missing your name"],a:0},
+        {q:"Media gives citizens what important tool?",o:["A platform to share ideas and organize","A way to avoid issues","A reason to stop voting","A rulebook for courts"],a:0},
+        {q:"Which are examples of informal participation?",o:["Posting, sharing, peaceful protesting","Court rulings","Executive orders","Veto overrides"],a:0},
+        {q:"Which are examples of formal participation?",o:["Voting, giving testimony, official comments","Only private chats","Anonymous rumors","Memes"],a:0},
+        {q:"Individuals influence policy when they:",o:["Show up, speak up, and follow up","Avoid information","Attack people","Use only jokes"],a:0},
+        {q:"Why does joining a local group matter?",o:["Many small actions can lead to change","Only national news matters","Only courts matter","Only ads matter"],a:0},
+        {q:"What are town halls best described as?",o:["Public meetings for questions and answers","Secret votes","Private parties","Courts"],a:0},
+        {q:"What is the main goal of an op-ed?",o:["To persuade readers on an issue","To report the weather","To list game scores","To sell products"],a:0},
+        {q:"How does being informed help you before speaking out?",o:["It helps you make stronger, clearer points","It helps you avoid all debate","It lets you pick winners","It replaces voting"],a:0},
+
+        // 9d — Social Media (10)
+        {q:"How can social media help campaigns?",o:["It lets candidates communicate directly with voters","It blocks all messages","It ends fundraising","It hides all data"],a:0},
+        {q:"Why can social media lower campaign costs?",o:["Posts can be free compared to ads","TV time is free","Printing is free","Mail is free"],a:0},
+        {q:"What is one negative effect of social media on politics?",o:["Misinformation can spread quickly","All posts are fact-checked","Opinions disappear","All posts are true"],a:0},
+        {q:"What is one positive effect of social media on civic life?",o:["It is easier to organize civic action","Young voters participate less","Protests are blocked","People cannot share information"],a:0},
+        {q:"Online civic discussion can be:",o:["Helpful or harmful depending on content","Always perfect","Always harmful","Always private"],a:0},
+        {q:"Compared to traditional media, social media is usually:",o:["More interactive and faster","Always slow","Always one-way","Never used by young people"],a:0},
+        {q:"What is a risk for fairness online?",o:["People may see mostly emotional content","Everyone reads reports fully","No one shares posts","Only facts appear"],a:0},
+        {q:"What can policy discussions online do?",o:["Focus attention on issues quickly","Replace laws","Close meetings","Stop debate"],a:0},
+        {q:"What does direct messaging to the public mean?",o:["There is less need for a 'middleman'","Facts are not needed","No public feedback exists","No records are kept"],a:0},
+        {q:"Overall, social media has:",o:["Both positive and negative effects","Only positive effects","Only negative effects","No effects"],a:0},
+
+        // 9e — Source Eval (10)
+        {q:"What does it mean to identify the source?",o:["To know who created the information","To know who dislikes it","To count likes","To choose a color"],a:0},
+        {q:"Who is the 'audience' for a message?",o:["The group the message is trying to reach","The number of ads on the page","The page length","The font choice"],a:0},
+        {q:"When asking about 'purpose,' what are you asking?",o:["Why the message was created","What time it was posted","Who shared it last","What colors were used"],a:0},
+        {q:"Which question helps check for bias?",o:["Are there political or money ties?","Is it funny?","Is it trending?","Is it short?"],a:0},
+        {q:"What is biased language?",o:["Words that push emotion instead of neutral facts","Numbers that are explained clearly","Sources that are named","Methods that are shown"],a:0},
+        {q:"How do you separate fact from opinion?",o:["Ask if the statement can be proven true","See if it is popular","See if it is short","See if it rhymes"],a:0},
+        {q:"What should you do first to verify a claim?",o:["Look for evidence and original sources","Trust the comments","Count emojis","Use one blog"],a:0},
+        {q:"Which trait is common in a credible article?",o:["It names sources or shows data clearly","It hides methods","It uses rumors","It avoids quotes"],a:0},
+        {q:"What does an informed media user do?",o:["Reads widely and thinks critically","Believes the first post","Avoids all sources","Blocks facts"],a:0},
+        {q:"Why should voters evaluate campaign information?",o:["To make reasoned choices among candidates","To copy others’ choices","To avoid choosing","To skip voting"],a:0},
+
+        // 9f — Multiple Sources (20)
+        {q:"Why read more than one report on the same event?",o:["To spot differences and find the best evidence","To copy answers","To get more ads","To avoid facts"],a:0},
+        {q:"What is a 'discrepancy' between two reports?",o:["A real difference in facts or focus","Using the same photo","Using the same font","Having the same page count"],a:0},
+        {q:"Why might two reports on the same event differ?",o:["They have different goals or perspectives","The law forces them to match","One editor writes all stories","They only copy each other"],a:0},
+        {q:"How can you evaluate a report’s accuracy?",o:["Check the evidence, methods, and sources","Read only comments","Pick the catchiest title","Ignore the data"],a:0},
+        {q:"If two sources give different numbers, what should you check first?",o:["Where each number came from","The bigger number","Ignore both numbers","Ask a friend"],a:0},
+        {q:"What is it called when sources agree on facts?",o:["Corroboration","Censorship","Segregation","Polarization"],a:0},
+        {q:"What is a primary source?",o:["An original record or direct evidence","A friend’s summary","A meme","A rumor"],a:0},
+        {q:"What is a secondary source?",o:["An analysis or summary of primary information","Raw court audio","A ballot","A receipt"],a:0},
+        {q:"What does it mean to synthesize sources?",o:["Blend information to see the big picture","Copy one source","Delete differences","Use one quote"],a:0},
+        {q:"When two stories disagree, what should you ask?",o:["Which one shows stronger evidence","Which one is longer","Which one is random","Which one has more ads"],a:0},
+        {q:"What happens when photos are used out of context?",o:["They can mislead readers","They are always perfect","They are peer-reviewed","They become unlawful"],a:0},
+        {q:"What should a good comparison checklist include?",o:["Who wrote it, evidence, tone, and purpose","Favorite color","Number of ads","Font size"],a:0},
+        {q:"If a source refuses to correct errors, what is that?",o:["A warning sign","Proof it is perfect","Normal practice","A form of fact-checking"],a:0},
+        {q:"How does looking across multiple sources help you?",o:["You can make a fairer judgment","You avoid thinking","You always agree with friends","You stop reading"],a:0},
+        {q:"What is one reason reports might differ?",o:["Different evidence or missing information","Laws ban differences","Editors are identical","They always use the same sources"],a:0},
+        {q:"How do you judge a claim’s validity?",o:["Check how methods and data are explained","See if it’s funny","See if it’s viral","See if it’s short"],a:0},
+        {q:"How can an eyewitness vs. a non-eyewitness explain differences?",o:["Eyewitnesses may provide different levels of detail","They must match exactly","The longer report wins","Both reports are invalid"],a:0},
+        {q:"What do multiple sources give you overall?",o:["A more complete understanding","Just more ads","No clarity at all","No facts at all"],a:0},
+        {q:"Why does sourcing matter in news?",o:["It shows where information came from","It sets prices","It adds jokes","It picks winners"],a:0},
+        {q:"What is a key takeaway for voters?",o:["Evaluate information in campaigns to choose wisely","Follow the loudest voice","Read only headlines","Avoid all news"],a:0}
+      ];
+      // -------------------------------------------------------------------
+
+      // Normalize stems (turn fragments into proper questions).
+      function normalizeStem(raw) {
+        if (!raw) return "Answer the question:";
+        let s = String(raw).trim();
+        if (s.endsWith(':')) s = s.slice(0, -1);
+        if (!/[?.!]$/.test(s)) s += '?';
+        return s;
+      }
+      // Shuffle options and track new correct index.
+      function shuffleOptions(options, correctIndex) {
+        const arr = options.map((t,i)=>({t,i}));
+        for (let k=arr.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[arr[k],arr[j]]=[arr[j],arr[k]];}
+        return { o: arr.map(x=>x.t), a: arr.findIndex(x=>x.i===correctIndex) };
+      }
+
+      // Build fixed 10×10 question grid (row-major).
+      if (QUESTIONS100.length!==100){ alert("Question bank must be exactly 100. Current: "+QUESTIONS100.length); }
+      const QGRID = Array.from({length:GRID_SIZE},()=>Array(GRID_SIZE));
+      for (let r=0,i=0;r<GRID_SIZE;r++){
+        for (let c=0;c<GRID_SIZE;c++,i++){
+          const base = QUESTIONS100[i];
+          const norm = normalizeStem(base.q);
+          const {o,a} = shuffleOptions(base.o, base.a);
+          QGRID[r][c] = { q: norm, o, a };
+        }
+      }
+
+      // DOM
+      const playerBoardEl = document.getElementById('player-board');
+      const opponentBoardEl = document.getElementById('opponent-board');
+      const opponentBoardContainer = document.getElementById('opponent-board-container');
+      const statusEl = document.getElementById('game-status');
+      const startButton = document.getElementById('start-button');
+      const rulesButton = document.getElementById('rules-button');
+      const rulesModal = document.getElementById('rules-modal');
+      const rulesCloseBtn = document.getElementById('rules-close-btn');
+      const modalEl = document.getElementById('question-modal');
+      const questionTextEl = document.getElementById('question-text');
+      const answerButtons = Array.from(modalEl.querySelectorAll('.answer-btn'));
+      const placementControlsEl = document.getElementById('placement-controls');
+      const placementStatusEl = document.getElementById('placement-status');
+      const shipDockEl = document.getElementById('ship-dock');
+      const orientationBtn = document.getElementById('orientation-btn');
+      const playerXAxis = document.getElementById('player-x-axis');
+      const playerYAxis = document.getElementById('player-y-axis');
+      const oppXAxis = document.getElementById('opponent-x-axis');
+      const oppYAxis = document.getElementById('opponent-y-axis');
+
+      // Game state
+      let playerBoardData = [], opponentBoardData = [];
+      let playerShips = [], opponentShips = [];
+      let playerHits = 0, opponentHits = 0;
+      let isPlayerTurn = true, isGameOver = false, awaitingPlayerAttack = null;
+      // Placement
+      let placementPhase = false, shipsToPlace = [], selectedShip = null, currentOrientation = 'horizontal';
+
+      // UI
+      startButton.addEventListener('click', startGame);
+      rulesButton.addEventListener('click', ()=>rulesModal.classList.remove('hidden'));
+      rulesCloseBtn.addEventListener('click', ()=>rulesModal.classList.add('hidden'));
+      renderCoordinates();
+      renderBoard(playerBoardEl, createEmptyBoard(), false);
+      renderBoard(opponentBoardEl, createEmptyBoard(), true);
+
+      function renderCoordinates(){
+        playerXAxis.innerHTML = playerYAxis.innerHTML = oppXAxis.innerHTML = oppYAxis.innerHTML = '';
+        for (let i=0;i<GRID_SIZE;i++){
+          const nx=document.createElement('div'); nx.textContent=i+1; playerXAxis.appendChild(nx);
+          const nx2=document.createElement('div'); nx2.textContent=i+1; oppXAxis.appendChild(nx2);
+          const ny=document.createElement('div'); ny.textContent=String.fromCharCode(65+i); playerYAxis.appendChild(ny);
+          const ny2=document.createElement('div'); ny2.textContent=String.fromCharCode(65+i); oppYAxis.appendChild(ny2);
+        }
+      }
+
+      function startGame(){
+        playerBoardData = createEmptyBoard();
+        opponentBoardData = createEmptyBoard();
+        playerShips = []; opponentShips = [];
+        playerHits = 0; opponentHits = 0;
+        isPlayerTurn = true; isGameOver = false; awaitingPlayerAttack = null;
+
+        renderCoordinates();
+        renderBoard(playerBoardEl, playerBoardData, false);
+        renderBoard(opponentBoardEl, opponentBoardData, true);
+
+        statusEl.textContent = "Place your ships!";
+        startButton.textContent = "Restart Game";
+        initPlacementPhase();
+      }
+
+      function createEmptyBoard(){
+        const b = Array.from({length:GRID_SIZE},()=>Array.from({length:GRID_SIZE},()=>({type:'water',hit:false,sunk:false})));
+        return b;
+      }
+
+      function renderBoard(boardEl, boardData, isOpponent){
+        boardEl.innerHTML = '';
+        for (let x=0;x<GRID_SIZE;x++) for (let y=0;y<GRID_SIZE;y++){
+          const cell=document.createElement('div');
+          cell.className='cell'; cell.dataset.x=x; cell.dataset.y=y;
+          const d=boardData[x][y];
+          if (d.type==='ship' && !isOpponent){
+            cell.classList.add('ship'); if(d.orientation) cell.classList.add(d.orientation); if(d.part) cell.classList.add(d.part);
+          }
+          if (d.hit){ cell.classList.add(d.type==='ship'?'hit':'miss'); if(d.type==='ship' && d.sunk) cell.classList.add('sunk'); }
+          if (isOpponent){ cell.addEventListener('click', handleAttackClick); }
+          else { cell.addEventListener('click', handlePlacementClick); cell.addEventListener('mouseover', handlePlacementHover); cell.addEventListener('mouseout', handlePlacementMouseOut); }
+          boardEl.appendChild(cell);
+        }
+      }
+
+      // Placement
+      function initPlacementPhase(){
+        placementPhase = true; shipsToPlace = [...SHIP_ROSTER]; selectedShip=null; currentOrientation='horizontal';
+        playerBoardEl.classList.add('placement-mode');
+        placementControlsEl.classList.remove('hidden');
+        opponentBoardContainer.classList.add('hidden');
+
+        shipDockEl.innerHTML='';
+        shipsToPlace.forEach(ship=>{
+          const btn=document.createElement('button');
+          btn.id=`btn-${ship.name}`; btn.className='ship-btn'; btn.textContent=`${ship.name} (${ship.length})`;
+          btn.onclick=()=>selectShipToPlace(ship);
+          shipDockEl.appendChild(btn);
+        });
+        orientationBtn.textContent='Orientation: Horizontal';
+        orientationBtn.onclick = toggleOrientation;
+        placementStatusEl.textContent='Select a ship from the dock.';
+      }
+
+      function selectShipToPlace(ship){
+        if (selectedShip){ const b=document.getElementById(`btn-${selectedShip.name}`); if(b) b.classList.remove('active'); }
+        selectedShip = ship;
+        document.getElementById(`btn-${ship.name}`).classList.add('active');
+        placementStatusEl.textContent=`Placing ${ship.name}. Click a start cell on your board.`;
+      }
+
+      function toggleOrientation(){
+        currentOrientation = currentOrientation==='horizontal'?'vertical':'horizontal';
+        orientationBtn.textContent=`Orientation: ${currentOrientation[0].toUpperCase()}${currentOrientation.slice(1)}`;
+      }
+
+      function getShipCoords(ship,x,y,orientation){
+        const coords=[]; for (let i=0;i<ship.length;i++){
+          coords.push({x: (orientation==='horizontal'?x:x+i), y:(orientation==='horizontal'?y+i:y)});
+        } return coords;
+      }
+
+      function checkPlacement(coords){
+        for (const c of coords){
+          if (c.x>=GRID_SIZE || c.y>=GRID_SIZE) return false;
+          if (playerBoardData[c.x][c.y].type==='ship') return false;
+        } return true;
+      }
+
+      function clearPlacementPreview(){ playerBoardEl.querySelectorAll('.cell').forEach(el=>el.classList.remove('preview-valid','preview-invalid')); }
+
+      function handlePlacementHover(e){
+        if (!selectedShip || !placementPhase) return;
+        clearPlacementPreview();
+        const x=+e.target.dataset.x, y=+e.target.dataset.y;
+        const coords=getShipCoords(selectedShip,x,y,currentOrientation);
+        const ok=checkPlacement(coords);
+        coords.forEach(c=>{
+          if (c.x<GRID_SIZE && c.y<GRID_SIZE){
+            const el=playerBoardEl.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`);
+            if (el) el.classList.add(ok?'preview-valid':'preview-invalid');
+          }
+        });
+      }
+
+      function handlePlacementMouseOut(){ if (!placementPhase) return; clearPlacementPreview(); }
+
+      function handlePlacementClick(e){
+        if (!selectedShip || !placementPhase) return;
+        const x=+e.target.dataset.x, y=+e.target.dataset.y;
+        const coords=getShipCoords(selectedShip,x,y,currentOrientation);
+        if (!checkPlacement(coords)){ placementStatusEl.textContent="Invalid placement!"; return; }
+        const sd={...selectedShip,coords,orientation:currentOrientation,hits:0}; playerShips.push(sd);
+        coords.forEach((c,i)=>{
+          let part='ship-middle'; if(i===0) part='ship-start'; if(i===sd.length-1) part='ship-end';
+          playerBoardData[c.x][c.y] = {type:'ship',name:sd.name,part,orientation:`ship-${currentOrientation}`,hit:false,sunk:false};
+        });
+        renderBoard(playerBoardEl,playerBoardData,false);
+        const btn=document.getElementById(`btn-${selectedShip.name}`); btn.disabled=true; btn.classList.remove('active');
+        shipsToPlace = shipsToPlace.filter(s=>s.name!==selectedShip.name); selectedShip=null;
+        if (shipsToPlace.length) placementStatusEl.textContent="Ship placed! Select another ship.";
+        else endPlacementPhase();
+      }
+
+      function endPlacementPhase(){
+        placementPhase=false; playerBoardEl.classList.remove('placement-mode');
+        placementControlsEl.classList.add('hidden'); opponentBoardContainer.classList.remove('hidden');
+        opponentShips = placeShipsRandomlyAI(opponentBoardData);
+        renderBoard(opponentBoardEl, opponentBoardData, true);
+        statusEl.textContent="Your turn. Choose a square to attack.";
+        isPlayerTurn=true;
+      }
+
+      function placeShipsRandomlyAI(board){
+        const placed=[];
+        for (const ship of SHIP_ROSTER){
+          let placedOk=false;
+          while(!placedOk){
+            const orient=Math.random()<0.5?'horizontal':'vertical';
+            const x=Math.floor(Math.random()*(orient==='horizontal'?GRID_SIZE:GRID_SIZE-ship.length+1));
+            const y=Math.floor(Math.random()*(orient==='horizontal'?GRID_SIZE-ship.length+1:GRID_SIZE));
+            const coords=getShipCoords(ship,x,y,orient);
+            if (coords.some(c=>c.x>=GRID_SIZE||c.y>=GRID_SIZE)) continue;
+            if (coords.some(c=>board[c.x][c.y].type==='ship')) continue;
+            const sd={...ship,coords,orientation:orient,hits:0}; placed.push(sd);
+            coords.forEach(c=>board[c.x][c.y]={type:'ship',name:ship.name,hit:false,sunk:false});
+            placedOk=true;
+          }
+        }
+        return placed;
+      }
+
+      // Gameplay
+      function handleAttackClick(e){
+        if (!isPlayerTurn || isGameOver || awaitingPlayerAttack) return;
+        const x=+e.target.dataset.x, y=+e.target.dataset.y;
+        if (opponentBoardData[x][y].hit){ statusEl.textContent="You already shot there."; return; }
+        awaitingPlayerAttack = {x,y};
+        askQuestionAt(x,y);
+      }
+
+      function askQuestionAt(x,y){
+        const q = QGRID[x][y];
+        questionTextEl.textContent = q.q;
+        const letters = ['A','B','C','D'];
+        answerButtons.forEach((btn,idx)=>{
+          btn.textContent = `${letters[idx]}) ${q.o[idx] || ''}`;
+          btn.onclick = () => handleAnswer(idx===q.a, letters[q.a]);
+        });
+        modalEl.classList.remove('hidden');
+      }
+
+      function handleAnswer(isCorrect, correctLabel){
+        modalEl.classList.add('hidden');
+        if (isGameOver) return;
+        if (isCorrect){
+          statusEl.textContent="Correct! Firing missile... 🚀";
+          setTimeout(processPlayerAttack, 500);
+        } else {
+          statusEl.textContent=`Wrong. Correct answer: ${correctLabel}. AI turn.`;
+          awaitingPlayerAttack=null; switchTurn();
+        }
+      }
+
+      function processPlayerAttack(){
+        if (!awaitingPlayerAttack) return;
+        const {x,y}=awaitingPlayerAttack; awaitingPlayerAttack=null;
+        const d=opponentBoardData[x][y]; const el=opponentBoardEl.querySelector(`[data-x="${x}"][data-y="${y}"]`);
+        d.hit=true;
+        if (d.type==='ship'){
+          playerHits++; el.classList.add('hit'); statusEl.textContent="💥 HIT!";
+          const ship=opponentShips.find(s=>s.coords.some(c=>c.x===x&&c.y===y));
+          if (ship){ ship.hits++; if (ship.hits===ship.length){
+            statusEl.textContent=`🔥 You sank their ${ship.name}!`;
+            ship.coords.forEach(c=>{ opponentBoardData[c.x][c.y].sunk=true; opponentBoardEl.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`).classList.add('sunk'); });
+          }}
+        } else { el.classList.add('miss'); statusEl.textContent="💧 Miss."; }
+        if (playerHits===TOTAL_SHIP_SQUARES){ endGame(true); return; }
+        switchTurn();
+      }
+
+      function aiTurn(){
+        if (isGameOver) return;
+        statusEl.textContent="Opponent is thinking… 🤖";
+        setTimeout(()=>{
+          const choices=[];
+          for (let x=0;x<GRID_SIZE;x++) for (let y=0;y<GRID_SIZE;y++) if (!playerBoardData[x][y].hit) choices.push([x,y]);
+          if (!choices.length) { switchTurn(); return; }
+          const [x,y]=choices[Math.floor(Math.random()*choices.length)];
+          const d=playerBoardData[x][y]; const el=playerBoardEl.querySelector(`[data-x="${x}"][data-y="${y}"]`);
+          d.hit=true;
+          if (d.type==='ship'){
+            opponentHits++; el.classList.add('hit'); statusEl.textContent=`Your ship at ${String.fromCharCode(65+x)}${y+1} was HIT!`;
+            const ship=playerShips.find(s=>s.coords.some(c=>c.x===x&&c.y===y));
+            if (ship){ ship.hits++; if (ship.hits===ship.length){
+              statusEl.textContent=`😭 The AI sank your ${ship.name}!`;
+              ship.coords.forEach(c=>{ playerBoardData[c.x][c.y].sunk=true; playerBoardEl.querySelector(`[data-x="${c.x}"][data-y="${c.y}"]`).classList.add('sunk'); });
+            }}
+          } else { el.classList.add('miss'); statusEl.textContent=`AI missed at ${String.fromCharCode(65+x)}${y+1}.`; }
+          if (opponentHits===TOTAL_SHIP_SQUARES){ endGame(false); return; }
+          setTimeout(()=>{ if(!isGameOver) switchTurn(); }, 600);
+        }, 600);
+      }
+
+      function switchTurn(){
+        if (isGameOver) return;
+        isPlayerTurn = !isPlayerTurn;
+        if (isPlayerTurn) statusEl.textContent="Your turn. Choose a square to attack.";
+        else aiTurn();
+      }
+
+      function endGame(playerWon){
+        isGameOver=true; modalEl.classList.add('hidden');
+        statusEl.textContent = playerWon ? "🏆 YOU WIN! All enemy ships sunk!" : "💀 GAME OVER! AI sank your fleet.";
+      }
+    });
+  </script>
+</body>
+</html>
+
